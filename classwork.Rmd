@@ -1,0 +1,274 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(purrr)
+library(modelr)
+library(lubridate)
+```
+
+
+
+```{r}
+ggplot(diamonds, aes(cut, price)) + geom_boxplot()
+
+ggplot(diamonds, aes(color, price)) + geom_boxplot()
+
+ggplot(diamonds, aes(clarity, price)) + geom_boxplot()
+```
+
+
+
+```{r}
+ggplot(diamonds, aes(carat, price)) +
+geom_point(alpha = 0.25)
+
+```
+
+
+```{r}
+diamonds2 <- diamonds %>%
+filter(carat <= 2.8) %>%
+mutate(lprice = log2(price), lcarat = log2(carat))
+# now visualize the transformed dataset
+ggplot(diamonds2, aes(lcarat, lprice)) +
+geom_point(alpha = 0.25)
+
+
+diamonds2
+```
+
+
+```{r}
+mod_diamonds <- lm(lprice ~ lcarat, data = diamonds2)
+x <- c(5,3,4,6,5,4.5)
+seq_range(x, 10)
+```
+
+```{r}
+grid <- diamonds2 %>%
+  data_grid(carat = seq_range(carat, 20)) %>%
+  mutate(lcarat = log2(carat)) %>%
+  add_predictions(mod_diamonds, "lprice") %>%
+  mutate(price = 2 ^ lprice)
+grid
+
+```
+
+```{r}
+ggplot(diamonds2, aes(carat, price)) +
+  geom_point(alpha = 0.25) +
+  geom_line(data = grid, color = "red", size = 2)
+```
+
+
+```{r}
+mod2diamonds<-lm(price~I(exp(carat)),data = diamonds2)
+mod2diamonds
+
+
+
+grid2 <- diamonds2 %>%
+  data_grid(carat = seq_range(carat, 20)) %>%
+  add_predictions(mod2diamonds, "price")
+grid2
+
+
+ggplot(diamonds2, aes(carat, price)) +
+  geom_point(alpha = 0.25) +
+  geom_line(data = grid, color = "red", size = 2)+
+  geom_line(data = grid2,color = "blue ",size=2)
+
+
+```
+
+
+
+
+```{r}
+mod3diamonds<-lm(price~I(2^(carat)),data = diamonds2)
+
+grid3 <- diamonds2 %>%
+  data_grid(carat = seq_range(carat, 20)) %>%
+  add_predictions(mod3diamonds, "price")
+grid3
+
+
+ggplot(diamonds2, aes(carat, price)) +
+  geom_point(alpha = 0.25) +
+  geom_line(data = grid, color = "red", size = 2)+
+  geom_line(data = grid2,color = "blue ",size=2)+
+  geom_line(data = grid3,color = "yellow ",size=2)
+
+```
+
+
+
+```{r}
+# add residuals to the diamonds dataset
+diamonds2 <- diamonds2 %>%
+add_residuals(mod_diamonds,"lresid")
+diamonds2 %>% ggplot(aes(lcarat, lresid)) +
+geom_point(alpha = 0.25)
+```
+
+
+```{r}
+ggplot(diamonds2, aes(cut, lresid)) + geom_boxplot()
+
+```
+
+```{r}
+ggplot(diamonds2, aes(color, lresid)) + geom_boxplot()
+ggplot(diamonds2, aes(clarity, lresid)) + geom_boxplot()
+
+```
+
+```{r}
+mod_diamond2 <- lm(
+lprice ~ lcarat + color + cut + clarity,
+data = diamonds2
+)
+grid <- diamonds2 %>%
+# data_grid(cut, .model = mod_diamond2) %>%
+data_grid(cut, color, clarity,
+lcarat = seq_range(lcarat, 20)) %>%
+add_predictions(mod_diamond2,"lprice")
+grid
+
+diamonds2 <- diamonds2 %>%
+  add_residuals(mod_diamond2, "lresid2")
+
+ggplot(diamonds2, aes(lcarat, lresid2)) +
+geom_hex(bins = 50)
+
+```
+
+```{r}
+diamonds2 %>%
+  filter(abs(lresid2) > 1.5) %>%
+  add_predictions(mod_diamond2) %>%
+  mutate(pred = round(2 ^ pred)) %>%
+  select(price, pred, carat:table, x:z) %>%
+arrange(price)
+
+```
+
+```{r}
+library(nycflights13)
+daily <- flights %>%
+mutate(date = make_date(year, month, day)) %>%
+count(date)
+daily
+```
+
+```{r}
+daily %>% ggplot(aes(date, n)) +
+geom_line()
+
+```
+
+```{r}
+daily <- daily %>%
+mutate(wday = wday(date, label = TRUE))
+
+g <- ggplot(daily, aes(wday, n)) +
+geom_boxplot()
+g
+```
+
+```{r}
+mod <- lm(n ~ wday, data = daily)
+
+grid <- daily %>%
+  data_grid(wday) %>%
+  add_predictions(mod, "n")
+
+ g + geom_point(data = grid,
+color = "red", size = 3)
+```
+
+```{r}
+daily <- daily %>%
+add_residuals(mod)
+daily %>%
+ggplot(aes(date, resid)) +
+geom_ref_line(h = 0) +
+geom_line()
+```
+
+```{r}
+daily %>%
+ggplot(aes(date, resid, color = wday)) +
+geom_ref_line(h = 0) +
+geom_line()
+
+```
+
+```{r}
+daily %>%
+filter(abs(resid) > 100 )
+
+```
+
+```{r}
+daily %>%
+  ggplot(aes(date, resid)) +
+  geom_ref_line(h = 0) +
+  geom_line(color = "grey50") +
+  geom_smooth(se = FALSE, span = 0.20)
+
+```
+
+```{r}
+daily %>%
+  filter(wday == "Sat") %>%
+  ggplot(aes(date, n)) +
+  geom_point() +
+  geom_line() + scale_x_date(NULL,date_breaks = "1 month",date_labels = "%b")
+
+```
+
+```{r}
+term <- function(date) {
+cut(date,
+breaks = ymd(20130101, 20130301, 20130605, 20130825, 20140101),
+labels = c("winter","spring", "summer", "fall")
+)
+}
+daily <- daily %>%
+mutate(term = term(date))
+daily %>%
+filter(wday == "Sat") %>%
+ggplot(aes(date, n, colour = term)) +
+geom_point(alpha = 1/3) +
+geom_line() +
+scale_x_date(NULL, date_breaks = "1 month", date_labels = "%b")
+
+```
+
+```{r}
+mod1 <- lm(n ~ wday, data = daily)
+mod2 <- lm(n ~ wday * term, data = daily)
+daily %>%
+gather_residuals(without_term = mod1, with_term = mod2) %>%
+ggplot(aes(date, resid, colour = model)) +
+geom_line(alpha = 0.75)
+
+```
+
+```{r}
+# overlay predicted values on the boxplots
+grid <- daily %>%
+data_grid(wday, term) %>%
+add_predictions(mod2, "n")
+ggplot(daily, aes(wday, n)) +
+geom_boxplot() +
+geom_point(data = grid, colour = "red") +
+facet_wrap(~ term)
+```
+
